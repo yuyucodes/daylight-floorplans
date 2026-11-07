@@ -1,0 +1,5 @@
+pandas
+plotly
+matplotlib
+shapely
+scikit-learn
