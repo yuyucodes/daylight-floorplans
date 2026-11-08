@@ -1,4 +1,3 @@
-import sys
 import pandas as pd
 import plotly.graph_objects as go
 from matplotlib import cm
@@ -15,22 +14,36 @@ HOURS = {
 SUN = [f"sun_{d}{h}" for d, hs in HOURS.items() for h in hs]
 COLS = [s + "_median" for s in SUN]
 HEIGHT = 2.5  # room height in meters
-# optional apartment id from the command line
-apt = sys.argv[1] if len(sys.argv) > 1 else None
 
-# only the needed columns and first 200k rows (file is 1.5 GB)
-sims = pd.read_csv("simulations.csv", usecols=["apartment_id", "area_id"] + COLS, nrows=200_000)
-if apt is None:
-    apt = sims["apartment_id"].sample(1).iloc[0]  # pick a random apartment
-sims = sims[sims["apartment_id"] == apt].drop(columns="apartment_id")
+# dominant demand segment of the location (from location_ratings.csv)
+SEGMENTS = {
+    1: "Rural-traditional", 2: "Modern worker", 3: "Transitional-alternative",
+    4: "Traditional middle class", 5: "Liberal middle class", 6: "Established alternative",
+    7: "Upper middle class", 8: "Professional elite", 9: "Urban elite", 10: "Unknown",
+}
+
+# only the needed columns and first 200k rows (file is huge)
+ids = ["apartment_id", "site_id", "building_id", "area_id"]
+sims = pd.read_csv("simulations.csv", usecols=ids + COLS, nrows=200_000)
+pick = sims.sample(1).iloc[0]  # random apartment (ids are only unique per site)
+apt, site, building = pick["apartment_id"], pick["site_id"], pick["building_id"]
+sims = sims[(sims["apartment_id"] == apt) & (sims["site_id"] == site)]
+sims = sims.drop(columns=["apartment_id", "site_id", "building_id"])
+
+# location rating of this apartment's building
+ratings = pd.read_csv("location_ratings.csv").set_index("building_id")
+info = ratings.reindex([building]).iloc[0]
+segment = SEGMENTS.get(info["location_rating_NASE_W_DOM"], "n/a")
+overall = info["location_rating_MIKRAT_W"]
 
 # read the big geometry file in chunks, keep only this apartment's rooms
 parts = []
-cols = ["entity_type", "entity_subtype", "geometry", "apartment_id", "area_id"]
+cols = ["entity_type", "entity_subtype", "geometry", "apartment_id", "site_id", "area_id"]
 for chunk in pd.read_csv("geometries.csv", usecols=cols, chunksize=200_000):
-    parts.append(chunk[(chunk["entity_type"] == "area") & (chunk["apartment_id"] == apt)])
+    keep = (chunk["entity_type"] == "area") & (chunk["apartment_id"] == apt) & (chunk["site_id"] == site)
+    parts.append(chunk[keep])
 # attach each room's daylight values to its shape
-areas = pd.concat(parts).merge(sims, on="area_id").reset_index(drop=True)
+areas = pd.concat(parts).drop(columns=["apartment_id", "site_id"]).merge(sims, on="area_id").reset_index(drop=True)
 
 
 def label(sun):
@@ -93,8 +106,8 @@ buttons = [
     for m, s in enumerate(SUN)
 ]
 fig.update_layout(
-    title=f"Apartment {apt[:8]}",
-    updatemenus=[dict(buttons=buttons, x=0, y=1.1)],
+    title=f"Apartment {apt[:8]} | {segment} | location rating {overall:.1f} / 5",
+    updatemenus=[dict(buttons=buttons, x=0, y=1, xanchor="left", yanchor="top")],
     scene=dict(aspectmode="data", xaxis_visible=False, yaxis_visible=False, zaxis_visible=False),
 )
 fig.write_html("apartment.html", auto_open=True)  # drag to rotate, hover a room to inspect
