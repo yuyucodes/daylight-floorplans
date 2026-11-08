@@ -1,7 +1,7 @@
 # Daylight Floorplans
 
 An interactive 3D view of apartment rooms colored by daylight, plus a model predicting daylight from layout.
-![A 3D floorplan of an apartment with a heatmap that shows degree of sunlight](Screenshot%202026-11-07%20at%207.22.14PM.png)
+![A 3D floorplan of an apartment with a heatmap that shows degree of sunlight](apartmenttest.png)
 
 ## Dataset
 
